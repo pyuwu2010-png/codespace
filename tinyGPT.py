@@ -198,16 +198,15 @@ class FeedForward(nn.Module):
     def forward(self, x): return self.net(x)
 
 class TransformerBlock(nn.Module):
-    def __init__(self, dim, num_heads, ff_hidden, dropout=0.1):
+    def __init__(self,dim,num_heads,ff_hidden,dropout=0.1):
         super().__init__()
-        self.ln1 = nn.LayerNorm(dim)
-        self.attn = MultiHeadSelfAttention(dim, num_heads,  dropout)
-        self.ln2 = nn.LayerNorm(dim)
-        self.ff = FeedForward(dim, ff_hidden, dropout)
-    
-    def forward(self, x, mask=None):
-        x += self.attn(self.ln1(x), mask=mask)
-        x += self.ff(self.ln2(x))
+        self.ln1=nn.LayerNorm(dim)
+        self.attn=MultiHeadSelfAttention(dim,num_heads,dropout)
+        self.ln2=nn.LayerNorm(dim)
+        self.ff=FeedForward(dim,ff_hidden,dropout)
+    def forward(self,x,mask=None):
+        x=x+self.attn(self.ln1(x),mask=mask)
+        x=x+self.ff(self.ln2(x))
         return x
 
 class TinyGPT(nn.Module):

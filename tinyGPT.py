@@ -1,4 +1,3 @@
-
 """
 tiny_chat_from_scratch.py
 
@@ -12,14 +11,13 @@ GERALD'S SUGGESTIONS:
 - Add 'accuracy' method, similar to loss, but calculates average accuracy
 - Add type annotations? (need confirmation)
 - Add more comments? (code is hard to understand)
-- Implement ability to load pre-trained models from a file (.pkl)
-- 'from typing import List'? Make sure you need this, I'm pretty sure Python
-  now has List as a type and you can remove that line
 """
 import math
 import random
 import time
-from typing import List
+
+# For loading and saving the model:
+import os, sys
 
 import torch
 import torch.nn as nn
@@ -109,7 +107,7 @@ pairs = generate_daily_conversation_pairs(SYNTHETIC_PAIRS)
 # Tokenizer
 # ----------------------------
 class CharTokenizer:
-    def __init__(self, texts: List[str], min_freq: int = 1):
+    def __init__(self, texts: list[str], min_freq: int = 1):
         chars = {}
         for t in texts:
             for c in t:
@@ -118,14 +116,14 @@ class CharTokenizer:
         self.stoi = {s: i for i, s in enumerate(self.vocab)}
         self.itos = {i: s for s, i in self.stoi.items()}
 
-    def encode(self, text: str, add_bos=True, add_eos=True) -> List[int]:
+    def encode(self, text: str, add_bos=True, add_eos=True) -> list[int]:
         out = []
         if add_bos: out.append(self.stoi['<bos>'])
         out += [self.stoi.get(c, self.stoi['<unk>']) for c in text]
         if add_eos: out.append(self.stoi['<eos>'])
         return out
 
-    def decode(self, ids: List[int]) -> str:
+    def decode(self, ids: list[int]) -> str:
         return ''.join([self.itos.get(i,'<unk>') for i in ids if self.itos.get(i) not in ('<bos>', '<eos>', '<pad>')])
 
     @property
@@ -137,7 +135,7 @@ tokenizer = CharTokenizer(pairs)
 # Dataset
 # ----------------------------
 class ChatDataset(Dataset):
-    def __init__(self, texts: List[str], tokenizer: CharTokenizer, block_size=BLOCK_SIZE):
+    def __init__(self, texts: list[str], tokenizer: CharTokenizer, block_size=BLOCK_SIZE):
         self.tokenizer = tokenizer
         self.block_size = block_size
         self.data = [torch.tensor(tokenizer.encode(t), dtype=torch.long) for t in texts]
@@ -281,19 +279,67 @@ def generate_reply(model, prompt, tokenizer, max_new_tokens=200, temperature=0.5
     return clean_reply(prompt, tokenizer.decode(input_ids[0].tolist()))
 
 # ----------------------------
+# Save model
+# ----------------------------
+def save_model(model, filename="network.pkl"):
+    if not filename:
+        filename = "network.pkl"
+
+    program_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+    os.makedirs(os.path.join(program_dir, "Saved networks"), exist_ok=True)
+
+    base = filename[:-4]
+    new = base
+
+    i = 0
+    while os.path.exists(os.path.join(program_dir, "Saved networks", f"{new}.pkl")):
+        i += 1
+        new = f"{base}_{i}"
+    filename = os.path.join(program_dir, "Saved networks", f"{new}.pkl")
+
+    torch.save(model, filename)
+
+def load_model(device, filename="network.pkl"):
+    if not filename:
+        filename = "network.pkl"
+    
+    program_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+    
+    with open(os.path.join(program_dir, "Saved networks", filename), "rb") as file:
+        return torch.load(file, map_location=device, weights_only=False) # SECURITY: Don't use this to load unknown files, could be dangerous
+
+# ----------------------------
+# Train or Load
+# ----------------------------
+def train_or_load(model, dataloader, epochs, lr, device):
+    trainload = input("Train or load existing? (t/l): ").lower().strip()
+    while True:
+        if trainload == "t":
+            print("Training on device:", device)
+            model = train_model(model, dataloader, epochs=epochs, lr=lr, device=device)
+            break
+        elif trainload == "l":
+            model = load_model(device, input("Input filename to load: "))
+            model.to(device)
+            model.eval()
+            break
+        else:
+            print("Invalid input, please try again.")
+
+# ----------------------------
 # Main
 # ----------------------------
 def main():
     dataset = ChatDataset(pairs, tokenizer, BLOCK_SIZE)
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch)
     model = TinyGPT(tokenizer.vocab_size, BLOCK_SIZE)
-    print("Training on device:", DEVICE)
-    model = train_model(model, dataloader, epochs=EPOCHS, lr=LEARNING_RATE, device=DEVICE)
+    train_or_load(model, dataloader, epochs=EPOCHS, lr=LEARNING_RATE, device=DEVICE)
     print("\nInteractive chat available. Type 'quit' to exit.")
     try:
         while True:
             prompt = input("You: ").strip()
             if prompt.lower().strip() in ("quit", "exit"): break
+            if prompt.lower().strip() in ("save"): save_model(model, input("Save as: "))
             reply = generate_reply(model, prompt+SEP, tokenizer, temperature=0.5, top_k=15, device=DEVICE)
             print("AI:", reply)
     except (KeyboardInterrupt, EOFError):

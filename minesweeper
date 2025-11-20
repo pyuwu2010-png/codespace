@@ -1,5 +1,7 @@
 import pyautogui
 
+# 1920 x 1080 px
 # Get screen size to verify functionality
 screenWidth, screenHeight = pyautogui.size()
 print(f"Screen size: {screenWidth}x{screenHeight}")
+

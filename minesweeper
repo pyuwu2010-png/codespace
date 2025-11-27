@@ -1,38 +1,79 @@
 import pyautogui
 from PIL import Image
 
-# 1. Get screen size (you already did this)
+# ----------------------------
+# 1. Screen & Board Setup
+# ----------------------------
 screenWidth, screenHeight = pyautogui.size()
 print(f"Screen size: {screenWidth}x{screenHeight}")
 
-# 2. Define the Minesweeper board region (replace with your game's coordinates)
-# Format: (left, top, width, height)
-board_region = (100, 100, 400, 400)  # <-- adjust these values to your board
-
-# 3. Take a screenshot of the board
-board_screenshot = pyautogui.screenshot(region=board_region)
-board_screenshot.save("board.png")  # Optional: save screenshot to check
-
-# 4. Divide the screenshot into tiles
-# Adjust these to your game's tile size
+# Minesweeper board region (adjust to your game)
+board_region = (100, 100, 400, 400)  # (left, top, width, height)
 tile_width = 16
 tile_height = 16
 
 rows = board_region[3] // tile_height
 cols = board_region[2] // tile_width
 
-# 5. Function to get each tile's image
+# ----------------------------
+# 2. Board State
+# ----------------------------
+board_state = [[None for _ in range(cols)] for _ in range(rows)]
+
+# ----------------------------
+# 3. Tile Utilities
+# ----------------------------
 def get_tile_image(screenshot, row, col):
+    """Crops a single tile from the screenshot."""
     left = col * tile_width
     top = row * tile_height
     right = left + tile_width
     bottom = top + tile_height
     return screenshot.crop((left, top, right, bottom))
 
-# 6. Loop through tiles and save them (for testing)
-for row in range(rows):
-    for col in range(cols):
-        tile_img = get_tile_image(board_screenshot, row, col)
-        tile_img.save(f"tiles/tile_{row}_{col}.png")  # saves individual tiles
+def classify_tile(tile_img):
+    """Classify a tile by color analysis."""
+    # Convert to RGB
+    tile_img = tile_img.convert("RGB")
+    colors = tile_img.getcolors(tile_width*tile_height)
 
-print(f"Board scanned: {rows} rows x {cols} cols")
+    # Get the most common color
+    most_common_color = max(colors, key=lambda x: x[0])[1]
+
+    r, g, b = most_common_color
+
+    # Basic classification by color (adjust values to your game)
+    if r > 200 and g > 200 and b > 200:
+        return None  # hidden tile (light gray/white)
+    elif r > 200 and g < 100 and b < 100:
+        return 'F'  # flag (red)
+    else:
+        # Check for numbers by typical color ranges
+        if r < 50 and g < 50 and b > 100:
+            return 1  # blue = 1
+        elif r < 50 and g > 100 and b < 50:
+            return 2  # green = 2
+        elif r > 150 and g < 50 and b < 50:
+            return 3  # red = 3
+        # Add more colors for 4-8 if needed
+        else:
+            return 0  # empty revealed tile
+
+# ----------------------------
+# 4. Update Board State
+# ----------------------------
+def update_board_state(board_state):
+    screenshot = pyautogui.screenshot(region=board_region)
+    for row in range(rows):
+        for col in range(cols):
+            tile_img = get_tile_image(screenshot, row, col)
+            board_state[row][col] = classify_tile(tile_img)
+
+# ----------------------------
+# 5. Test: Scan Board
+# ----------------------------
+update_board_state(board_state)
+
+# Print board state
+for row in board_state:
+    print(row)

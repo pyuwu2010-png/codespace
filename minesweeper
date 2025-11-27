@@ -1,7 +1,38 @@
 import pyautogui
+from PIL import Image
 
-# 1920 x 1080 px
-# Get screen size to verify functionality
+# 1. Get screen size (you already did this)
 screenWidth, screenHeight = pyautogui.size()
 print(f"Screen size: {screenWidth}x{screenHeight}")
 
+# 2. Define the Minesweeper board region (replace with your game's coordinates)
+# Format: (left, top, width, height)
+board_region = (100, 100, 400, 400)  # <-- adjust these values to your board
+
+# 3. Take a screenshot of the board
+board_screenshot = pyautogui.screenshot(region=board_region)
+board_screenshot.save("board.png")  # Optional: save screenshot to check
+
+# 4. Divide the screenshot into tiles
+# Adjust these to your game's tile size
+tile_width = 16
+tile_height = 16
+
+rows = board_region[3] // tile_height
+cols = board_region[2] // tile_width
+
+# 5. Function to get each tile's image
+def get_tile_image(screenshot, row, col):
+    left = col * tile_width
+    top = row * tile_height
+    right = left + tile_width
+    bottom = top + tile_height
+    return screenshot.crop((left, top, right, bottom))
+
+# 6. Loop through tiles and save them (for testing)
+for row in range(rows):
+    for col in range(cols):
+        tile_img = get_tile_image(board_screenshot, row, col)
+        tile_img.save(f"tiles/tile_{row}_{col}.png")  # saves individual tiles
+
+print(f"Board scanned: {rows} rows x {cols} cols")

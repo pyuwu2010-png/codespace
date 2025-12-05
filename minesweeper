@@ -1,36 +1,154 @@
+import time
+import random
+import sys
 import pyautogui
 from PIL import Image
 
-# Your board region (left, top, width, height)
-board_region = (245, 210, 767, 409)
+pyautogui.FAILSAFE = True
+pyautogui.PAUSE = 0.02
 
-# Exact board dimensions
+board_region = (245, 210, 767, 409)
 cols = 30
 rows = 16
+CLICK_DELAY = 0.06
+LOOP_DELAY = 0.25
+SAFE_FIRST_CLICK = True
 
-# Compute tile size
 tile_width = board_region[2] // cols
 tile_height = board_region[3] // rows
+tile_size = min(tile_width, tile_height)
 
-print("Tile size:", tile_width, "x", tile_height)
+def tile_center_on_screen(row, col):
+    left, top, _, _ = board_region
+    x = left + col * tile_size + tile_size // 2
+    y = top + row * tile_size + tile_size // 2
+    return x, y
 
-board_state = [[None for _ in range(cols)] for _ in range(rows)]
+def click_tile(row, col):
+    x, y = tile_center_on_screen(row, col)
+    pyautogui.click(x, y)
+    time.sleep(CLICK_DELAY)
 
-def get_tile_image(screenshot, row, col):
-    left = col * tile_width
-    top = row * tile_height
-    right = left + tile_width
-    bottom = top + tile_height
+def get_tile_image_from_screenshot(screenshot, row, col):
+    left = col * tile_size
+    top = row * tile_size
+    right = left + tile_size
+    bottom = top + tile_size
     return screenshot.crop((left, top, right, bottom))
 
-
 def classify_tile(tile_img):
-    tile_img = tile_img.convert("RGB")
-    colors = tile_img.getcolors(tile_width * tile_height)
+    tile = tile_img.convert("RGB")
+    w, h = tile.size
+    sample = [
+        (w//2, h//2),
+        (w//2, h//4),
+        (w//4, h//2),
+        (3*w//4, h//2),
+        (w//2, 3*h//4)
+    ]
+    pixels = [tile.getpixel(c) for c in sample]
+    r = sum(p[0] for p in pixels)//5
+    g = sum(p[1] for p in pixels)//5
+    b = sum(p[2] for p in pixels)//5
 
-    if not colors:
+    gray_count = sum(1 for p in pixels if abs(p[0]-p[1])<20 and abs(p[1]-p[2])<20 and 100<p[0]<220)
+    if gray_count >= 3:
         return None
 
-    # Pick the most common pixel color
-    _, (r, g, b) = max(colors, key=lambda x: x[0])
+    if r > 200 and g > 200 and b > 200:
+        return 0
+    if b > 120 and r < 100 and g < 110:
+        return 1
+    if g > 120 and r < 110 and b < 110:
+        return 2
+    if r > 140 and g < 110 and b < 110:
+        return 3
+    if b > 100 and r < 80 and g < 80:
+        if r+g+b < 240:
+            return 4
+        return 1
+    if r > 120 and g < 90 and b < 90:
+        return 5
+    if g > 110 and b > 110 and r < 120:
+        return 6
+    return 0
 
+def scan_board_state():
+    screenshot = pyautogui.screenshot(region=board_region)
+    board = [[None for _ in range(cols)] for _ in range(rows)]
+    for r in range(rows):
+        for c in range(cols):
+            img = get_tile_image_from_screenshot(screenshot, r, c)
+            board[r][c] = classify_tile(img)
+    return board
+
+def scan_single_tile_state(r, c):
+    left, top, _, _ = board_region
+    img = pyautogui.screenshot(region=(left + c*tile_size, top + r*tile_size, tile_size, tile_size))
+    return classify_tile(img)
+
+def neighbors(r, c):
+    for dr in (-1,0,1):
+        for dc in (-1,0,1):
+            if dr == 0 and dc == 0:
+                continue
+            nr, nc = r+dr, c+dc
+            if 0 <= nr < rows and 0 <= nc < cols:
+                yield nr, nc
+
+def apply_deterministic_rules(board):
+    to_click = set()
+    for r in range(rows):
+        for c in range(cols):
+            val = board[r][c]
+            if isinstance(val, int) and val > 0:
+                neigh = list(neighbors(r, c))
+                hidden = [(nr,nc) for nr,nc in neigh if board[nr][nc] is None]
+                flagged = [(nr,nc) for nr,nc in neigh if board[nr][nc] == 'F']
+                if len(flagged) == val and len(hidden) > 0:
+                    for pos in hidden:
+                        to_click.add(pos)
+
+    acted = False
+    for (r,c) in sorted(to_click):
+        if scan_single_tile_state(r, c) is None:
+            click_tile(r, c)
+            acted = True
+            time.sleep(0.03)
+    return acted
+
+def random_hidden_click(board):
+    hidden = [(r,c) for r in range(rows) for c in range(cols) if board[r][c] is None]
+    if not hidden:
+        return False
+    r, c = random.choice(hidden)
+    click_tile(r, c)
+    return True
+
+def play_game(max_iterations=1000):
+    if SAFE_FIRST_CLICK:
+        r, c = rows//2, cols//2
+        click_tile(r, c)
+        time.sleep(0.6)
+    i = 0
+    while i < max_iterations:
+        i += 1
+        board = scan_board_state()
+        acted = apply_deterministic_rules(board)
+        if acted:
+            time.sleep(0.45)
+            continue
+        if not random_hidden_click(board):
+            break
+        time.sleep(0.6)
+
+if __name__ == "__main__":
+    ans = input("Type 'yes' to start the bot: ").strip().lower()
+    if ans != "yes":
+        sys.exit()
+    try:
+        play_game()
+    except pyautogui.FailSafeException:
+        pass
+    except KeyboardInterrupt:
+        pass

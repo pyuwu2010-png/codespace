@@ -7,7 +7,7 @@ from PIL import Image
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.02
 
-board_region = (245, 210, 767, 409)
+board_region = (269, 211, 719, 384)
 cols = 30
 rows = 16
 CLICK_DELAY = 0.06
